@@ -61,15 +61,81 @@ void dequeue(struct Queue *q){
     else{
         (*q).tail++;}  
 }
+
 char* NCPU;
 char* TSLICE;
 struct procTable* processTable;
 int sharedMemory;
 struct Queue *running;
 struct Queue *ready;
+
+void scheduler(int ncpu, int tslice){
+    while(true){
+        unsigned int rem_sleep=sleep(tslice/1000);
+        if(rem_sleep>0){
+            printf("Sleep interrupted after "+rem_sleep+" seconds\n");
+            exit(1);
+        }
+        if(sem_wait(&(*processTable).mutex)==-1){
+            perror("sem_wait");
+            exit(1);
+        }
+        if(isEmpty(running) && isEmpty(ready) && (*processTable).count==0){
+            printf("Terminating processor as no processes remaining.")
+            terminate();
+        }
+        //moving process to ready queue
+        for(int i=0; i<(*processTable)count; i++){
+            if((*processTable).processArray[i].submitted && !(*processTable).processArray[i].completed) && !(*processTable).processArray[i].queued){
+                if((*ready).size < (*ready).max-1){
+                    (*processTable).processArray[i].queued=true;
+                    enqueue(ready, &(*processTable).processArray[i]);
+                }else{break;}
+            }
+        }
+        //pausing process in running queue
+        if(!isEmpty(running)){
+            for(int i=0; i<ncpu, i++){
+                if(!isEmpty(running)){
+                    struct process *proc=(*running).array[(*running).head];
+                    if(!(*proc).completed){
+                        enqueue(ready,proc);
+                        (*proc).execution_time+=end_time(&(*proc).start);
+                        start_time=&(*proc).start;
+                        if(kill((*proc).pid,SIGSTOP==-1){
+                            perror("kill");
+                            exit(1);
+                        }
+                        dequeue(running);
+                    }else{dequeue(running);}    
+        }}}
+        //resuming process in ready queue
+        if(!isEmpty(ready)){
+            for(int i=0; i<ncpu;i++){
+                if(!isEmpty(ready)){
+                    struct process *proc=(*ready).array[(*ready).head];
+                    dequeue(ready);
+                    (*proc).wait_time+=end_time(&(*proc).start);
+                    start_time(&(*proc).start);
+                    if(kill(proc.pid,SIGCONT)==-1){
+                    perror("kill");
+                    exit(1);
+                }
+                enqueue(running,proc);
+        }}}
+        if(sem_post(&(*processTable).mutex)==-1){
+            perror("sem_post");
+            exit(1);
+        }
+}}
 int main(int argc, char const *argv[]){
-    NCPU = atoi(argv[1]);
-    TSLICE = atoi(argv[2])*1000;
+    //NCPU = atoi(argv[1]);
+    //TSLICE = atoi(argv[2])*1000;
+    NCPU=(char*)argv[1];
+    TSLICE=(char*)argv[2];
+    int ncpu=atoi(NCPU);
+    int tslice=atoi(TSLICE)*1000;
+    
     sharedMemory=shm_open("/shm26",O_RDWR, 0666);
     if (sharedMemory==-1){
         perror("shm_open error");
