@@ -5,8 +5,26 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <time.h>
+#include <stdbool.h>
+#include <semaphore.h>
+#include <sys/mman.h>
+#include <errno.h>
 
 #define MAX 1000
+
+struct process{
+    int pid;
+    bool submitted;
+    bool queued;
+    bool completed;
+    char* cmd;};
+
+struct procTable{
+    struct process processArray[MAX];
+    int count;
+    sem_t mutex;
+
+};
 char* historyArray[MAX];  
 int historyCount=0;
 double runtimeArray[MAX];
@@ -15,6 +33,11 @@ struct timeval endTime;
 char* timeArray[MAX];
 time_t currtime;
 int pidArray[MAX];
+char* NCPU;
+char* TSLICE;
+struct procTable* processTable;
+int sharedMemory;
+
 void showHistory(){
     for(int i=0;i<historyCount;i++){
         printf("%s\n",historyArray[i]);}}
@@ -69,9 +92,28 @@ void launch(char* command){
                 free(arr);
                 exit(1);
             }
-            if (strcmp("history",arr[0])==0){
-                showHistory();
-            }
+            else if (strncmp(command, "submit", 6) == 0) {
+
+        if (sem_wait(&((*processTable).mutex)) == -1){
+            perror("sem_wait");
+            exit(1);
+        }
+        if ((*processTable).count >= MAX) {
+            perror("Process limit exceeded");
+            sem_post(&((*processTable).mutex));
+            exit(1);}
+
+        (*processTable).processArray[(*processTable).count].submitted = true;
+        (*processTable).processArray[(*processTable).count].completed = false;
+        (*processTable).processArray[(*processTable).count].queued = false;
+        (*processTable).processArray[(*processTable).count].pid = submit_process(command);
+        //start_time((*processTable).processArray[(*processTable).count].start);
+        (*processTable).count++;
+
+        if (sem_post((*processTable).mutex)==-1){
+            perror("sem_post");
+            exit(1);
+        }
             else{
             parse(arr[0],cmdLst," ");
             execvp(cmdLst[0],cmdLst);
@@ -163,7 +205,7 @@ void launch(char* command){
                 exit(1);    
             }
             i++;
-}}}
+}}}}
 void handleSigint(int sig){
     printf("\nExiting...\n");
     printf("History:\n");
@@ -212,8 +254,91 @@ void mainloop(){
     }}
     
 
-int main(){
+int main(int argc, char** argv){
     signal(SIGINT,handleSigint);
-    mainloop();
+    if (argc!=3){
+        printf("Input format: %s <NCPU> <TIME_QUANTUM>\n",argv[0]);
+        exit(1);
+    }
+
+    sharedMemory=shm_open("/shm26", O_CREAT|O_RDWR, 0666);
+    if (sharedMemory==-1){
+        perror("shm_open error");
+        exit(1);
+    }
+    //printf("Shared Memory FD: %d\n", sharedMemory);
+    if (ftruncate(sharedMemory,sizeof(struct procTable))==-1){
+        perror("ftruncate error");
+        exit(1);
+    }
+    processTable=mmap(NULL,sizeof(struct procTable),PROT_READ|PROT_WRITE, MAP_SHARED,sharedMemory,0);
+    if (processTable==MAP_FAILED){
+        perror("mmap");
+        exit(1);
+    }
+    (*processTable).count=0;
+    NCPU=argv[1];
+    if (atoi(NCPU)<=0){
+        printf("invalid ncpu value");
+    }
+    TSLICE=argv[2];
+    if (atoi(TSLICE)<=0){
+        printf("invalid time slice value");
+        
+    }
+    
+    if (sem_init(&((*processTable).mutex),1,1)==-1){
+        perror("semaphore initialize error");
+        exit(1);
+    }
+    int pid=fork();
+    if (pid<0){
+        perror("forking error");
+        exit(1);
+    }
+    else if (pid==0){
+        if (execl("./simple-scheduler", "SimpleScheduler", NCPU, TSLICE, NULL)==-1){
+        perror("execl error");
+        exit(1);}
+        if (sem_destroy(&((*processTable).mutex)) == -1){
+        perror("shm_destroy");
+        exit(1);
+    }
+        if (munmap(processTable, sizeof(struct procTable)) < 0){
+            printf("Error unmapping\n");
+            perror("munmap");
+            exit(1);
+        }
+        if (close(sharedMemory) == -1){
+            perror("close");
+            exit(1);
+        }
+        if (shm_unlink("/shm26") == -1){
+        perror("shm_unlink");
+        exit(1);
+    }
+        exit(0);
+    }
+    else{
+        mainloop();
+        if (sem_destroy(&((*processTable).mutex)) == -1){
+        perror("shm_destroy");
+        exit(1);
+    }
+        if (munmap(processTable, sizeof(struct procTable)) < 0){
+            printf("Error unmapping\n");
+            perror("munmap");
+            exit(1);
+        }
+        if (close(sharedMemory) == -1){
+            perror("close");
+            exit(1);
+        }
+        if (shm_unlink("/shm26") == -1){
+        perror("shm_unlink");
+        exit(1);
+    }
+        
+    }
 }
 
