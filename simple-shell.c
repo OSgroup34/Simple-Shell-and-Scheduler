@@ -37,6 +37,7 @@ char* NCPU;
 char* TSLICE;
 struct procTable* processTable;
 int sharedMemory;
+int schedulerPID;
 
 void showHistory(){
     for(int i=0;i<historyCount;i++){
@@ -106,7 +107,7 @@ void launch(char* command){
         (*processTable).processArray[(*processTable).count].submitted = true;
         (*processTable).processArray[(*processTable).count].completed = false;
         (*processTable).processArray[(*processTable).count].queued = false;
-        (*processTable).processArray[(*processTable).count].pid = submit_process(command);
+        (*processTable).processArray[(*processTable).count].pid=processSubmit(command);
         //start_time((*processTable).processArray[(*processTable).count].start);
         (*processTable).count++;
 
@@ -213,6 +214,28 @@ void handleSigint(int sig){
         printf("%s PID:%d | Runtime:%f seconds | Start Time: %s\n", historyArray[i], pidArray[i], runtimeArray[i],timeArray[i]);}
         exit(0);
     }
+void handleSigchld(int signum, siginfo_t *info, void *context){
+    if(signum == SIGCHLD){
+        pid_t sender_pid=(*info).si_pid;
+        if (sender_pid!=schedulerPID){
+            if (sem_wait(&(*processTable).mutex) == -1){
+                perror("sem_wait");
+                exit(1);
+            }
+            for (int i=0; i<(*processTable).count; i++){
+                if ((*processTable).processArray[i].pid == sender_pid){
+                    //(*processTable).processArray[i].execution_time += end_time(&process_table->history[i].start);
+                    (*processTable).processArray[i].completed = true;
+                    break;
+                }
+            }
+            if (sem_post(&(*processTable).mutex) == -1){
+                perror("sem_post");
+                exit(1);
+            }
+        }
+    }
+}
 void mainloop(){
     int repeat=1;
     while (repeat!=0){
@@ -254,8 +277,34 @@ void mainloop(){
     }}
     
 
+int processSubmit(char *command){
+    int pid;
+    char** arr = (char**)malloc(MAX * sizeof(char*));
+    char* cmd = strtok(command, " "); 
+    parse(cmd,arr," ");
+    pid=fork();
+    if (pid<0){
+        printf("forking error.\n");
+        exit(1);
+    }
+    else if (pid==0){
+        if (execvp(arr[0],arr) == -1) {
+            perror("execvp");
+            printf("Not a valid/supported command.\n");
+            exit(1);
+        }
+        exit(0);
+    }
+    else{
+        if (kill(pid, SIGSTOP)==-1){
+            perror("kill");
+            exit(1);
+        }
+        return pid;
+    }}
 int main(int argc, char** argv){
     signal(SIGINT,handleSigint);
+    signal(SIGCHLD,handleSigchld);
     if (argc!=3){
         printf("Input format: %s <NCPU> <TIME_QUANTUM>\n",argv[0]);
         exit(1);
@@ -320,6 +369,7 @@ int main(int argc, char** argv){
         exit(0);
     }
     else{
+        schedulerPID=pid;
         mainloop();
         if (sem_destroy(&((*processTable).mutex)) == -1){
         perror("shm_destroy");
