@@ -110,7 +110,6 @@ void launch(char* command){
         (*processTable).processArray[(*processTable).count].submitted = true;
         (*processTable).processArray[(*processTable).count].completed = false;
         (*processTable).processArray[(*processTable).count].queued = false;
-        printf("submitting process");
         (*processTable).processArray[(*processTable).count].pid=processSubmit(command);
         //start_time((*processTable).processArray[(*processTable).count].start);
         (*processTable).count++;
@@ -121,7 +120,6 @@ void launch(char* command){
         }}
             else{
             parse(arr[0],cmdLst," ");
-            printf("execvp normal");
             execvp(cmdLst[0],cmdLst);
             perror("execvp failed");
             free(command);
@@ -218,6 +216,23 @@ void handleSigint(int sig){
     printf("History:\n");
     for (int i = 0; i<historyCount; i++) {
         printf("%s PID:%d | Runtime:%f seconds | Start Time: %s\n", historyArray[i], pidArray[i], runtimeArray[i],timeArray[i]);}
+        if (sem_destroy(&((*processTable).mutex)) == -1){
+            perror("shm_destroy");
+            exit(1);
+            }
+            if (munmap(processTable, sizeof(struct procTable)) < 0){
+              printf("Error unmapping\n");
+              perror("munmap");
+              exit(1);
+            }
+            if (close(sharedMemory) == -1){
+              perror("close");
+              exit(1);
+            }
+            if (shm_unlink("/shm26") == -1){
+            perror("shm_unlink");
+            exit(1);
+            }
         exit(0);
     }
 void handleSigchld(int signum, siginfo_t *info, void *context){
@@ -229,8 +244,7 @@ void handleSigchld(int signum, siginfo_t *info, void *context){
                 exit(1);
             }
             for (int i=0; i<(*processTable).count; i++){
-                if ((*processTable).processArray[i].pid == sender_pid){
-                    //(*processTable).processArray[i].execution_time += end_time(&process_table->history[i].start);
+                if ((*processTable).processArray[i].pid == sender_pid){ 
                     (*processTable).processArray[i].completed = true;
                     break;
                 }
@@ -251,7 +265,7 @@ void mainloop(){
             continue;
         }
         if ((strcmp(cmd, "history")) != 0 && (strcmp(cmd,"schedule")!=0)){
-            printf("launching");
+
             launch(cmd);
         }
         else if(strcmp(cmd,"schedule")==0){
@@ -263,7 +277,7 @@ void mainloop(){
           else if (pid==0){
             if (execl("./simple-scheduler", "SimpleScheduler", NCPU, TSLICE, NULL)==-1){
             perror("execl error");
-            exit(1);}
+            exit(1);}/*
             if (sem_destroy(&((*processTable).mutex)) == -1){
             perror("shm_destroy");
             exit(1);
@@ -280,11 +294,10 @@ void mainloop(){
             if (shm_unlink("/shm26") == -1){
             perror("shm_unlink");
             exit(1);
-            }
+            }*/
         exit(0);
         }
         else{
-          wait(NULL);
           schedulerPID=pid;}
         }
         else if ((strcmp(cmd, "history") == 0)){ 
@@ -324,9 +337,11 @@ void mainloop(){
 int processSubmit(char *command){
     int pid;
     char** arr = (char**)malloc(MAX * sizeof(char*));
-    char* cmd = strtok(command, " "); 
-    cmd=strtok(NULL," ");
-    parse(cmd,arr," ");
+    char *space=strchr(command,' ');
+    if (space != NULL){
+        memmove(command,space+1,strlen(command));
+    }
+    parse(command,arr," ");
     pid=fork();
     if (pid<0){
         printf("forking error.\n");
@@ -363,10 +378,10 @@ int main(int argc, char** argv){
       perror("memset fault");
       exit(1);}
     signal_int.sa_handler=handleSigint;
+  
     if(sigaction(SIGINT,&signal_int,NULL)==-1){
       perror("sigaction fault");
       exit(1);}
-    
     if (argc!=3){
         printf("Input format: %s <NCPU> <TIME_QUANTUM>\n",argv[0]);
         exit(1);
@@ -402,36 +417,7 @@ int main(int argc, char** argv){
         perror("semaphore initialize error");
         exit(1);
     }
-    /*int pid=fork();
-    if (pid<0){
-        perror("forking error");
-        exit(1);
-    }
-    else if (pid==0){
-        if (execl("./simple-scheduler", "SimpleScheduler", NCPU, TSLICE, NULL)==-1){
-        perror("execl error");
-        exit(1);}
-        if (sem_destroy(&((*processTable).mutex)) == -1){
-        perror("shm_destroy");
-        exit(1);
-    }
-        if (munmap(processTable, sizeof(struct procTable)) < 0){
-            printf("Error unmapping\n");
-            perror("munmap");
-            exit(1);
-        }
-        if (close(sharedMemory) == -1){
-            perror("close");
-            exit(1);
-        }
-        if (shm_unlink("/shm26") == -1){
-        perror("shm_unlink");
-        exit(1);
-    }
-        exit(0);
-    }
-    else{
-        schedulerPID=pid;} */
+       
         
         mainloop();
         if (sem_destroy(&((*processTable).mutex)) == -1){
@@ -449,7 +435,7 @@ int main(int argc, char** argv){
         }
         if (shm_unlink("/shm26") == -1){
         perror("shm_unlink");
-        exit(1);
-    }
+        exit(1);}
+    
         
 }
