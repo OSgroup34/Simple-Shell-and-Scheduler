@@ -117,7 +117,7 @@ void launch(char* command){
         if (sem_post(&((*processTable).mutex))==-1){
             perror("sem_post");
             exit(1);
-        }
+        }}
             else{
             parse(arr[0],cmdLst," ");
             execvp(cmdLst[0],cmdLst);
@@ -126,7 +126,7 @@ void launch(char* command){
             free(cmdLst);
             free(arr);
             exit(1);}
-        } 
+        }
         else if (check>0) {
             gettimeofday(&startTime, NULL);
             currtime=time(NULL);
@@ -209,7 +209,7 @@ void launch(char* command){
                 exit(1);    
             }
             i++;
-}}}}
+}}}
 void handleSigint(int sig){
     printf("\nExiting...\n");
     printf("History:\n");
