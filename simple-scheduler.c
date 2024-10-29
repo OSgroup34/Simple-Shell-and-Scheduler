@@ -72,6 +72,7 @@ struct Queue *ready;
 
 void scheduler(int ncpu, int tslice){
     while(true){
+        fflush(stdout);
         unsigned int rem_sleep=sleep(tslice/1000);
         if(rem_sleep>0){
             printf("Sleep interrupted after %u seconds\n",rem_sleep);
@@ -81,19 +82,25 @@ void scheduler(int ncpu, int tslice){
             perror("sem_wait");
             exit(1);
         }
-        if(isEmpty(running) && isEmpty(ready) && (*processTable).count==0){
-            printf("Terminating processor as no processes remaining.");
-            for (int i=(*running).max-1; i>=0; i--) {
-            free((*running).array[i]);
-        }
-        free((*running).array);
-        free(running);
-        for (int i=(*ready).max-1; i>=0; i--){
-            free((*ready).array[i]);
-        }
+        bool done=true;
+        for (int i=0;i<(*processTable).count;i++){
+           if (!(*processTable).processArray[i].completed){
+              done=false;
+              break;
+        }}
+        if(isEmpty(running) && isEmpty(ready) && done){
+            printf("Terminating scheduler as no processes remaining.");
+            fflush(stdout);
+            /*for (int i = (*running).max - 1; i >= 0; i--) {
+    if ((*running).array[i] != NULL){free((*running).array[i]);}
+}*/
+free((*running).array);
+free(running);
+      for (int i = (*running).max - 1; i >= 0; i--) {
+        if ((*ready).array[i] != NULL){free((*ready).array[i]);}}
         free((*ready).array);
         free(ready);
-        
+        /*
         if (sem_destroy(&(*processTable).mutex)==-1){
             perror("shm_destroy");
             exit(1);
@@ -107,8 +114,9 @@ void scheduler(int ncpu, int tslice){
         if (close(sharedMemory) == -1){
             perror("close");
             exit(1);
-        }
+        }*/
         exit(0);
+        
         }
         //moving process to ready queue
         for(int i=0; i<(*processTable).count; i++){
@@ -133,7 +141,8 @@ void scheduler(int ncpu, int tslice){
                             exit(1);
                         }
                         dequeue(running);
-                    }else{dequeue(running);}    
+                    }else{dequeue(running);
+                  }    
         }}}
         //resuming process in ready queue
         if(!isEmpty(ready)){
@@ -181,7 +190,7 @@ int main(int argc, char const *argv[]){
         exit(1);
     }
     (*ready).head=(*ready).tail=(*ready).size = 0;
-    (*ready).max=MAX;
+    (*ready).max=50;
     (*ready).array=(struct process **)malloc((*ready).max*sizeof(struct process));
     if ((*ready).array==NULL){
         perror("malloc");
@@ -218,23 +227,22 @@ int main(int argc, char const *argv[]){
         exit(1);
     }
     
-    if(daemon(1, 1)){
+    /*if(daemon(1, 1)){
         perror("daemon");
         exit(1);
-    }
+    }*/
 
     scheduler(ncpu,tslice);
 
-    for (int i=(*running).max-1;i>=0; i--) {
-        free((*running).array[i]);
-    }
-    free((*running).array);
-    free(running);
-    for (int i=(*ready).max-1;i>=0; i--){
-        free((*ready).array[i]);
-    }
-    free((*ready).array);
-    free(ready);
+    for (int i = (*running).max - 1; i >= 0; i--) {
+    if ((*running).array[i] != NULL){free((*running).array[i]);}
+}
+free((*running).array);
+free(running);
+      for (int i = (*running).max - 1; i >= 0; i--) {
+        if ((*ready).array[i] != NULL){free((*ready).array[i]);}}
+        free((*ready).array);
+        free(ready);
     
     if (sem_destroy(&(*processTable).mutex)==-1){
         perror("shm_destroy");
