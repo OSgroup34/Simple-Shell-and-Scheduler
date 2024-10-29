@@ -9,6 +9,8 @@
 #include <semaphore.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
 #define MAX 1000
 
@@ -38,6 +40,7 @@ char* TSLICE;
 struct procTable* processTable;
 int sharedMemory;
 int schedulerPID;
+int processSubmit(char *command);
 
 void showHistory(){
     for(int i=0;i<historyCount;i++){
@@ -111,7 +114,7 @@ void launch(char* command){
         //start_time((*processTable).processArray[(*processTable).count].start);
         (*processTable).count++;
 
-        if (sem_post((*processTable).mutex)==-1){
+        if (sem_post(&((*processTable).mutex))==-1){
             perror("sem_post");
             exit(1);
         }
@@ -303,8 +306,25 @@ int processSubmit(char *command){
         return pid;
     }}
 int main(int argc, char** argv){
-    signal(SIGINT,handleSigint);
-    signal(SIGCHLD,handleSigchld);
+    struct sigaction signal_chld;
+    if(memset(&signal_chld,0,sizeof(signal_chld))==0){
+      perror("memset fault");
+      exit(1);}
+    signal_chld.sa_flags=SA_SIGINFO|SA_NOCLDSTOP|SA_RESTART;
+    signal_chld.sa_sigaction=handleSigchld;
+    if(sigaction(SIGCHLD,&signal_chld,NULL)==-1){
+      perror("sigaction fault");
+      exit(1);}
+      
+    struct sigaction signal_int;
+    if(memset(&signal_int,0,sizeof(signal_int))==0){
+      perror("memset fault");
+      exit(1);}
+    signal_int.sa_handler=handleSigint;
+    if(sigaction(SIGINT,&signal_int,NULL)==-1){
+      perror("sigaction fault");
+      exit(1);}
+    
     if (argc!=3){
         printf("Input format: %s <NCPU> <TIME_QUANTUM>\n",argv[0]);
         exit(1);
@@ -391,4 +411,3 @@ int main(int argc, char** argv){
         
     }
 }
-
