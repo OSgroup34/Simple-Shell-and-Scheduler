@@ -9,6 +9,7 @@
 #include <semaphore.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #define MAX 1000
 
@@ -142,7 +143,7 @@ void scheduler(int ncpu, int tslice){
                     dequeue(ready);
                     //(*proc).wait_time+=end_time(&(*proc).start);
                     //start_time(&(*proc).start);
-                    if(kill((*proc).pid,SIGSTOP)==-1){
+                    if(kill((*proc).pid,SIGCONT)==-1){
                             perror("kill");
                             exit(1);
                         }
@@ -154,8 +155,6 @@ void scheduler(int ncpu, int tslice){
         }
 }}
 int main(int argc, char const *argv[]){
-    //NCPU = atoi(argv[1]);
-    //TSLICE = atoi(argv[2])*1000;
     NCPU=(char*)argv[1];
     TSLICE=(char*)argv[2];
     int ncpu=atoi(NCPU);
@@ -176,7 +175,7 @@ int main(int argc, char const *argv[]){
         perror("mmap");
         exit(1);
     }
-    ready=(struct queue *)(malloc(sizeof(struct Queue)));
+    ready=(struct Queue*)(malloc(sizeof(struct Queue)));
     if (ready==NULL){
         perror("malloc");
         exit(1);
@@ -195,7 +194,7 @@ int main(int argc, char const *argv[]){
             exit(1);
         }
     }
-    running=(struct queue *) (malloc(sizeof(struct Queue)));
+    running=(struct Queue*)(malloc(sizeof(struct Queue)));
     if (running==NULL){
         perror("malloc");
         exit(1);
