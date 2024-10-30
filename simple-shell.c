@@ -43,8 +43,27 @@ int processSubmit(char *command);
 pid_t mainPid;
 
 void showHistory(){
-    for(int i=0;i<historyCount;i++){
-        printf("%s\n",historyArray[i]);}}
+            if (sem_wait(&((*processTable).mutex)) == -1) {
+            perror("sem_wait");
+            exit(1);
+        }
+
+        // Loop through the process table to print details
+        for (int i = 0; i < (*processTable).count; i++) {
+            struct process* proc = &(*processTable).processArray[i];
+            printf("PID: %d | Command: %s | Submitted: %s | Queued: %s | Completed: %s\n",
+                   proc->pid,
+                   proc->cmd,
+                   proc->submitted ? "Yes" : "No",
+                   proc->queued ? "Yes" : "No",
+                   proc->completed ? "Yes" : "No");
+        }
+
+        // Unlock shared memory after reading
+        if (sem_post(&((*processTable).mutex)) == -1) {
+            perror("sem_post");
+            exit(1);
+        }}
 char* readInput() {
     char* buffer=(char*)malloc(MAX*sizeof(char*));
     printf("OSAssignment2@shell:~$ ");
