@@ -94,7 +94,32 @@ void launch(char* command){
             exit(1);    }*/
     int arrsize=parse(command,arr,"|");
     bool isSubmit = (strncmp(command, "submit", 6) == 0);
-    if(!isEmpty(command) && !isSubmit){
+    if(isEmpty(command)){return;}
+    else if (isSubmit){
+
+        if (sem_wait(&((*processTable).mutex)) == -1){
+            perror("sem_wait");
+            exit(1);
+        }
+        if ((*processTable).count >= MAX) {
+            perror("Process limit exceeded");
+            sem_post(&((*processTable).mutex));
+            exit(1);}
+
+        (*processTable).processArray[(*processTable).count].submitted = true;
+        (*processTable).processArray[(*processTable).count].completed = false;
+        (*processTable).processArray[(*processTable).count].queued = false;
+        (*processTable).processArray[(*processTable).count].cmd =strdup(command);
+        (*processTable).processArray[(*processTable).count].pid=processSubmit(command);
+        //start_time((*processTable).processArray[(*processTable).count].start);
+        (*processTable).count++;
+        
+        if (sem_post(&((*processTable).mutex))==-1){
+            perror("sem_post");
+            exit(1);
+        }
+        return;}
+    else{
     if (sem_wait(&((*processTable).mutex)) == -1) {
         perror("sem_wait");
         free(arr);
@@ -133,28 +158,7 @@ void launch(char* command){
                 free(arr);
                 exit(1);
             }
-            else if (isSubmit){
-
-        if (sem_wait(&((*processTable).mutex)) == -1){
-            perror("sem_wait");
-            exit(1);
-        }
-        if ((*processTable).count >= MAX) {
-            perror("Process limit exceeded");
-            sem_post(&((*processTable).mutex));
-            exit(1);}
-
-        (*processTable).processArray[(*processTable).count].submitted = true;
-        (*processTable).processArray[(*processTable).count].completed = false;
-        (*processTable).processArray[(*processTable).count].queued = false;
-        (*processTable).processArray[(*processTable).count].pid=processSubmit(command);
-        //start_time((*processTable).processArray[(*processTable).count].start);
-        (*processTable).count++;
-        
-        if (sem_post(&((*processTable).mutex))==-1){
-            perror("sem_post");
-            exit(1);
-        }}
+            
             else{
             parse(arr[0],cmdLst," ");
             execvp(cmdLst[0],cmdLst);
@@ -321,13 +325,14 @@ void handleSigchld(int signum, siginfo_t *info, void *context){
     if(signum == SIGCHLD){
         pid_t sender_pid=(*info).si_pid;
         if (sender_pid!=schedulerPID){
-            if (sem_wait(&(*processTable).mutex) == -1){
+            if (sem_wait(&(*processTable).mutex)==-1){
                 perror("sem_wait");
                 exit(1);
             }
             for (int i=0; i<(*processTable).count; i++){
                 if ((*processTable).processArray[i].pid == sender_pid){ 
                     (*processTable).processArray[i].completed = true;
+                    (*processTable).processArray[i].queued=false;
                     break;
                 }
             }
