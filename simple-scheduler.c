@@ -24,7 +24,6 @@ struct procTable{
     struct process processArray[MAX];
     int count;
     sem_t mutex;
-
 };
 struct Queue{
     int head,tail,max,size;
@@ -69,6 +68,7 @@ struct procTable* processTable;
 int sharedMemory;
 struct Queue *running;
 struct Queue *ready;
+bool isRunning;
 
 void scheduler(int ncpu, int tslice){
     while(true){
@@ -82,25 +82,20 @@ void scheduler(int ncpu, int tslice){
             perror("sem_wait");
             exit(1);
         }
-        bool done=true;
-        for (int i=0;i<(*processTable).count;i++){
-           if (!(*processTable).processArray[i].completed){
-              done=false;
-              break;
-        }}
-        if(isEmpty(running) && isEmpty(ready) && done){
+        /*
+        if(isEmpty(running) && isEmpty(ready) && !(*processTable).running){
             printf("Terminating scheduler as no processes remaining.");
             fflush(stdout);
-            /*for (int i = (*running).max - 1; i >= 0; i--) {
+            for (int i = (*running).max - 1; i >= 0; i--) {
     if ((*running).array[i] != NULL){free((*running).array[i]);}
-}*/
+}
 free((*running).array);
 free(running);
       for (int i = (*running).max - 1; i >= 0; i--) {
         if ((*ready).array[i] != NULL){free((*ready).array[i]);}}
         free((*ready).array);
         free(ready);
-        /*
+        
         if (sem_destroy(&(*processTable).mutex)==-1){
             perror("shm_destroy");
             exit(1);
@@ -114,10 +109,10 @@ free(running);
         if (close(sharedMemory) == -1){
             perror("close");
             exit(1);
-        }*/
+        }
         exit(0);
         
-        }
+        }*/
         //moving process to ready queue
         for(int i=0; i<(*processTable).count; i++){
             if((*processTable).processArray[i].submitted && !((*processTable).processArray[i]).completed && !(*processTable).processArray[i].queued){
@@ -158,12 +153,35 @@ free(running);
                         }
                 enqueue(running,proc);
         }}}
+        if(isEmpty(running) && isEmpty(ready) && !isRunning){
+            printf("Terminating scheduler as no processes remaining.");
+            fflush(stdout);
+            for (int i = (*running).max - 1; i >= 0; i--) {
+    if ((*running).array[i] != NULL){free((*running).array[i]);}
+}
+free((*running).array);
+free(running);
+      for (int i = (*ready).max - 1; i >= 0; i--) {
+        if ((*ready).array[i] != NULL){free((*ready).array[i]);}}
+        free((*ready).array);
+        free(ready);
+        if(sem_post(&(*processTable).mutex)==-1){
+            perror("sem_post");
+            exit(1);
+        }
+        exit(0);}
         if(sem_post(&(*processTable).mutex)==-1){
             perror("sem_post");
             exit(1);
         }
 }}
+static void my_handler(int signum){
+    if(signum == SIGINT){
+        running=false;
+    }
+}
 int main(int argc, char const *argv[]){
+    isRunning=true;
     NCPU=(char*)argv[1];
     TSLICE=(char*)argv[2];
     int ncpu=atoi(NCPU);
