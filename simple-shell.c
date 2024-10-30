@@ -70,6 +70,11 @@ int parse(char* cmd,char** arr,char* delim){
     arr[size]=NULL;
     return size;}
 
+bool isEmpty(const char* command) {
+    while (*command == ' ') command++;
+    return *command == '\0';           
+}
+
 void launch(char* command){
     char** arr = (char**)malloc(MAX * sizeof(char*));
     if (arr == NULL) {
@@ -77,7 +82,7 @@ void launch(char* command){
         free(command);
         exit(1);
     }
-    if (historyCount<MAX){
+    /*if (historyCount<MAX){
         printf("hi %s \n",command);
         historyArray[historyCount]=strdup(command);
         printf("%u \n",historyCount);
@@ -86,8 +91,38 @@ void launch(char* command){
             perror("Command Limit Exceeded");
             free(arr);
             free(command);
-            exit(1);    }
+            exit(1);    }*/
     int arrsize=parse(command,arr,"|");
+    bool isSubmit = (strncmp(command, "submit", 6) == 0);
+    if(!isEmpty(command) && !isSubmit){
+    if (sem_wait(&((*processTable).mutex)) == -1) {
+        perror("sem_wait");
+        free(arr);
+        free(command);
+        exit(1);
+    }
+    if ((*processTable).count<MAX){
+        int index=(*processTable).count;
+        //(*processTable).processArray[index].pid=0; // Initialize PID as 0; updated after fork
+        (*processTable).processArray[index].submitted=isSubmit;
+        (*processTable).processArray[index].queued=false;  // queued only if 'submit' command
+        (*processTable).processArray[index].completed=false;
+        (*processTable).processArray[index].cmd=strdup(command); // Store the command in shared memory
+        (*processTable).count++; // Increase count of processes
+    } else {
+        perror("Process table limit reached");
+        free(arr);
+        free(command);
+        sem_post(&((*processTable).mutex));
+        exit(1);
+    }
+    if (sem_post(&((*processTable).mutex)) == -1) {
+        perror("sem_post");
+        free(arr);
+        free(command);
+        exit(1);
+    }}
+    
     if (arrsize==1){
         int check=fork();
         if (check == 0){
@@ -98,7 +133,7 @@ void launch(char* command){
                 free(arr);
                 exit(1);
             }
-            else if (strncmp(command, "submit", 6) == 0) {
+            else if (isSubmit){
 
         if (sem_wait(&((*processTable).mutex)) == -1){
             perror("sem_wait");
@@ -115,7 +150,7 @@ void launch(char* command){
         (*processTable).processArray[(*processTable).count].pid=processSubmit(command);
         //start_time((*processTable).processArray[(*processTable).count].start);
         (*processTable).count++;
-
+        
         if (sem_post(&((*processTable).mutex))==-1){
             perror("sem_post");
             exit(1);
@@ -130,7 +165,7 @@ void launch(char* command){
             exit(1);}
         }
         else if (check>0) {
-            gettimeofday(&startTime, NULL);
+            /*gettimeofday(&startTime, NULL);
             currtime=time(NULL);
             timeArray[historyCount]=strdup(ctime(&currtime));
             if (timeArray[historyCount] == NULL) {
@@ -143,8 +178,29 @@ void launch(char* command){
             fflush(stdout);
             gettimeofday(&endTime, NULL);
             runtimeArray[historyCount]=(endTime.tv_sec-startTime.tv_sec)+(endTime.tv_usec-startTime.tv_usec)/1000000.0;
-            historyCount++;
+            historyCount++;*/
             
+            if (sem_wait(&((*processTable).mutex)) == -1) {
+                perror("sem_wait");
+                exit(1);
+            }
+
+            (*processTable).processArray[(*processTable).count-1].pid=check;
+
+            if(sem_post(&((*processTable).mutex))==-1){
+                perror("sem_post");
+                exit(1);
+            }
+            wait(NULL);
+            if(sem_wait(&((*processTable).mutex))==-1){
+                perror("sem_wait");
+                exit(1);
+            }
+            (*processTable).processArray[(*processTable).count-1].completed=true;
+            if (sem_post(&((*processTable).mutex))==-1){
+                perror("sem_post");
+                exit(1);
+            }
         } 
         else {
             perror("Forking error\n");
@@ -216,9 +272,32 @@ void launch(char* command){
 void handleSigint(int sig){
     if (mainPid==getpid()){
     printf("\nExiting...\n");
-    printf("History:\n");
-    for (int i = 0; i<historyCount; i++) {
-        printf("%s PID:%d | Runtime:%f seconds | Start Time: %s\n", historyArray[i], pidArray[i], runtimeArray[i],timeArray[i]);}
+    printf("ProcessTable:\n");
+    /*for (int i = 0; i<historyCount; i++) {
+        printf("%s PID:%d | Runtime:%f seconds | Start Time: %s\n", historyArray[i], pidArray[i], runtimeArray[i],timeArray[i]);}*/
+        
+        if (sem_wait(&((*processTable).mutex)) == -1) {
+            perror("sem_wait");
+            exit(1);
+        }
+
+        // Loop through the process table to print details
+        for (int i = 0; i < (*processTable).count; i++) {
+            struct process* proc = &(*processTable).processArray[i];
+            printf("PID: %d | Command: %s | Submitted: %s | Queued: %s | Completed: %s\n",
+                   proc->pid,
+                   proc->cmd,
+                   proc->submitted ? "Yes" : "No",
+                   proc->queued ? "Yes" : "No",
+                   proc->completed ? "Yes" : "No");
+        }
+
+        // Unlock shared memory after reading
+        if (sem_post(&((*processTable).mutex)) == -1) {
+            perror("sem_post");
+            exit(1);
+        }
+        
         if (sem_destroy(&((*processTable).mutex)) == -1){
             perror("shm_destroy");
             exit(1);
