@@ -25,7 +25,6 @@ struct procTable{
     struct process processArray[MAX];
     int count;
     sem_t mutex;
-
 };
 char* historyArray[MAX];  
 int historyCount=0;
@@ -41,6 +40,7 @@ struct procTable* processTable;
 int sharedMemory;
 int schedulerPID;
 int processSubmit(char *command);
+pid_t mainPid;
 
 void showHistory(){
     for(int i=0;i<historyCount;i++){
@@ -78,7 +78,9 @@ void launch(char* command){
         exit(1);
     }
     if (historyCount<MAX){
+        printf("hi %s \n",command);
         historyArray[historyCount]=strdup(command);
+        printf("%u \n",historyCount);
             }
     else{
             perror("Command Limit Exceeded");
@@ -212,6 +214,7 @@ void launch(char* command){
             i++;
 }}}
 void handleSigint(int sig){
+    if (mainPid==getpid()){
     printf("\nExiting...\n");
     printf("History:\n");
     for (int i = 0; i<historyCount; i++) {
@@ -232,7 +235,7 @@ void handleSigint(int sig){
             if (shm_unlink("/shm26") == -1){
             perror("shm_unlink");
             exit(1);
-            }
+            }}
         exit(0);
     }
 void handleSigchld(int signum, siginfo_t *info, void *context){
@@ -264,10 +267,24 @@ void mainloop(){
             free(cmd);
             continue;
         }
-        if ((strcmp(cmd, "history")) != 0 && (strcmp(cmd,"schedule")!=0)){
+        if ((strcmp(cmd, "history")) != 0 /*&& (strcmp(cmd,"stop")!=0)*/){
 
-            launch(cmd);
+            launch(cmd);}
+        /*else if(strcmp(cmd,"stop")==0){
+        if (sem_wait(&(*processTable).mutex) == -1){
+                perror("sem_wait");
+                exit(1);
+            }
+            (*processTable).running=false;
+            if (sem_post(&(*processTable).mutex) == -1){
+                perror("sem_post");
+                exit(1);
+            }
+            waitpid(schedulerPID,NULL,0);
+            
+            
         }
+        
         else if(strcmp(cmd,"schedule")==0){
           int pid=fork();
           if (pid<0){
@@ -277,7 +294,7 @@ void mainloop(){
           else if (pid==0){
             if (execl("./simple-scheduler", "SimpleScheduler", NCPU, TSLICE, NULL)==-1){
             perror("execl error");
-            exit(1);}/*
+            exit(1);}
             if (sem_destroy(&((*processTable).mutex)) == -1){
             perror("shm_destroy");
             exit(1);
@@ -294,12 +311,12 @@ void mainloop(){
             if (shm_unlink("/shm26") == -1){
             perror("shm_unlink");
             exit(1);
-            }*/
+            }
         exit(0);
         }
         else{
           schedulerPID=pid;}
-        }
+        }*/
         else if ((strcmp(cmd, "history") == 0)){ 
             int check = fork();
             if (check==0){
@@ -363,6 +380,7 @@ int processSubmit(char *command){
         return pid;
     }}
 int main(int argc, char** argv){
+    mainPid=getpid();
     struct sigaction signal_chld;
     if(memset(&signal_chld,0,sizeof(signal_chld))==0){
       perror("memset fault");
@@ -417,7 +435,17 @@ int main(int argc, char** argv){
         perror("semaphore initialize error");
         exit(1);
     }
-       
+    int pid=fork();
+          if (pid<0){
+            perror("forking error");
+            exit(1);
+            }
+          else if (pid==0){
+            if (execl("./simple-scheduler", "SimpleScheduler", NCPU, TSLICE, NULL)==-1){
+            perror("execl error");
+            exit(1);}}
+          else{
+          schedulerPID=pid;}
         
         mainloop();
         if (sem_destroy(&((*processTable).mutex)) == -1){
